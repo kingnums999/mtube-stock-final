@@ -539,27 +539,28 @@ export default function App() {
     });
     setSheets(saved);
 
-    // Auto-load if URL has company param
+    // Read URL params: ?mtube=SHEET_ID&rushabh=SHEET_ID
     var p = new URLSearchParams(window.location.search);
-    var coParam = p.get("co");
-    var sidParam = p.get("sheetId");
-    if (coParam && sidParam) {
-      saved[coParam] = sidParam;
-      localStorage.setItem("stock-" + coParam, sidParam);
+    var urlSheets = {};
+    COMPANIES.forEach(function(co) {
+      var sid = p.get(co.id);
+      if (sid) {
+        urlSheets[co.id] = sid;
+        saved[co.id] = sid;
+        localStorage.setItem("stock-" + co.id, sid);
+      }
+    });
+    if (Object.keys(urlSheets).length > 0) {
       setSheets(Object.assign({}, saved));
-      setActiveCoId(coParam);
-      setScreen("loading");
-      fetchData(sidParam).then(function(d) {
-        if (d) {
-          setDataCache(function(prev) { var n = Object.assign({}, prev); n[coParam] = d; return n; });
-          setScreen("browse");
-        } else {
-          setScreen("pick");
-        }
-      });
-    } else if (Object.keys(saved).length === 1) {
-      // Only one company connected, auto-open it
-      var onlyId = Object.keys(saved)[0];
+    }
+
+    // Auto-load connected companies
+    var connectedIds = Object.keys(saved);
+    if (connectedIds.length === 0) return;
+
+    // If exactly one company, auto-open it
+    if (connectedIds.length === 1) {
+      var onlyId = connectedIds[0];
       setActiveCoId(onlyId);
       setScreen("loading");
       fetchData(saved[onlyId]).then(function(d) {
@@ -571,6 +572,7 @@ export default function App() {
         }
       });
     }
+    // If multiple, show picker (don't auto-load all)
   }, []);
 
   var fetchData = async function(sheetId) {
@@ -604,10 +606,22 @@ export default function App() {
     setScreen("setup");
   };
 
+  var updateUrl = function(allSheets) {
+    var params = new URLSearchParams();
+    COMPANIES.forEach(function(co) {
+      if (allSheets[co.id]) params.set(co.id, allSheets[co.id]);
+    });
+    var qs = params.toString();
+    window.history.replaceState({}, "", qs ? "?" + qs : window.location.pathname);
+  };
+
   var onConnect = function(sheetId, data) {
     var coId = setupCoId;
     localStorage.setItem("stock-" + coId, sheetId);
-    setSheets(function(prev) { var n = Object.assign({}, prev); n[coId] = sheetId; return n; });
+    var newSheets = Object.assign({}, sheets);
+    newSheets[coId] = sheetId;
+    setSheets(newSheets);
+    updateUrl(newSheets);
     setDataCache(function(prev) { var n = Object.assign({}, prev); n[coId] = data; return n; });
     setActiveCoId(coId);
     setScreen("browse");
