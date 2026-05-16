@@ -338,6 +338,14 @@ export default function App() {
         </div>
       </div>
 
+      {/* Date + item count bar */}
+      {dataCache[tab] && (
+        <div style={{ padding:"6px 16px",background:"#f8f9fa",borderBottom:"1px solid #e5e7eb",display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:600,color:"#6b7280",flexShrink:0 }}>
+          <span>{dataCache[tab].reportDate ? "Stock as on " + dataCache[tab].reportDate : ""}</span>
+          <span>{dataCache[tab].items.length} items</span>
+        </div>
+      )}
+
       {/* Content based on active tab */}
       {sheets[tab] && dataCache[tab] ? (
         <StockView data={dataCache[tab]} accentColor={tab === "mtube" ? "#d97706" : "#059669"} />
