@@ -1,6 +1,11 @@
 'use client';
 import { useState, useEffect, useCallback } from "react";
 
+const COMPANIES = [
+  { id: "mtube", name: "Mtube", full: "Manhar Tube Corporation", color: "#f59e0b", bg: "linear-gradient(135deg,#1e3a5f,#1e40af)" },
+  { id: "rushabh", name: "Rushabh", full: "Rushabh Agency", color: "#10b981", bg: "linear-gradient(135deg,#064e3b,#047857)" },
+];
+
 const CK = {
   PA:{l:"APH Tube",f:"APH TUBE BS 6323 PART V",c:"#2563eb"},
   PB:{l:"ERW Boiler Tube",f:"ERW BOILER TUBE BS 3059 PT I GR 320 IBR",c:"#dc2626"},
@@ -37,34 +42,63 @@ const CK = {
 };
 const GRADES = Object.entries(CK).map(([p, v]) => ({ prefix: p, ...v }));
 
-function getOdFromDesc(desc) {
-  const m = desc.match(/^(\d+\.?\d*)\s*OD/);
+function getOd(desc) {
+  var m = desc.match(/^(\d+\.?\d*)\s*OD/);
+  return m ? parseFloat(m[1]) : null;
+}
+function getThk(desc) {
+  var m = desc.match(/OD\s*X\s*(\d+\.?\d*)\s*THK/i);
   return m ? parseFloat(m[1]) : null;
 }
 
-function getThkFromDesc(desc) {
-  const m = desc.match(/OD\s*X\s*(\d+\.?\d*)\s*THK/i);
-  return m ? parseFloat(m[1]) : null;
+function CompanyPicker({ companies, sheets, onPick, onSetup }) {
+  return (
+    <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flex:1,padding:24 }}>
+      <div style={{ fontSize:48,marginBottom:16 }}>📊</div>
+      <div style={{ fontSize:20,fontWeight:800,marginBottom:6,textAlign:"center",color:"#1a1a2e" }}>Stock Query</div>
+      <div style={{ fontSize:13,color:"#6b7280",marginBottom:24,textAlign:"center" }}>Select company</div>
+      <div style={{ width:"100%",maxWidth:380,display:"flex",flexDirection:"column",gap:10 }}>
+        {companies.map(co => {
+          var connected = !!sheets[co.id];
+          return (
+            <button key={co.id} onClick={() => connected ? onPick(co.id) : onSetup(co.id)}
+              style={{ background:"#ffffff",border:"2px solid " + (connected ? co.color : "#e5e7eb"),borderRadius:14,padding:"18px 20px",cursor:"pointer",textAlign:"left",width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 2px 8px rgba(0,0,0,0.06)" }}>
+              <div>
+                <div style={{ fontSize:18,fontWeight:800,color:"#1a1a2e" }}>{co.name}</div>
+                <div style={{ fontSize:12,color:"#6b7280",marginTop:2 }}>{co.full}</div>
+              </div>
+              <div style={{ textAlign:"right" }}>
+                {connected ? (
+                  <div style={{ background:co.color,color:"#fff",padding:"6px 14px",borderRadius:8,fontSize:12,fontWeight:700 }}>Open</div>
+                ) : (
+                  <div style={{ background:"#f1f5f9",color:"#6b7280",padding:"6px 14px",borderRadius:8,fontSize:12,fontWeight:600 }}>Setup</div>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ marginTop:20,fontSize:11,color:"#9ca3af",textAlign:"center" }}>Each company connects to its own Google Sheet</div>
+    </div>
+  );
 }
 
-function Setup({ onConnect }) {
-  const [url, setUrl] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
-  const getId = (s) => {
-    const m = s.trim().match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+function Setup({ company, onConnect, onBack }) {
+  var [url, setUrl] = useState("");
+  var [loading, setLoading] = useState(false);
+  var [err, setErr] = useState("");
+  var getId = function(s) {
+    var m = s.trim().match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
     return m ? m[1] : /^[a-zA-Z0-9_-]{20,}$/.test(s.trim()) ? s.trim() : null;
   };
-  const go = async () => {
-    const id = getId(url);
+  var go = async function() {
+    var id = getId(url);
     if (!id) { setErr("Paste the full Google Sheet link."); return; }
     setLoading(true); setErr("");
     try {
-      const r = await fetch("/api/stock?sheetId=" + id);
-      const d = await r.json();
+      var r = await fetch("/api/stock?sheetId=" + id);
+      var d = await r.json();
       if (d.error) { setErr(d.error); setLoading(false); return; }
-      localStorage.setItem("mtube-sid", id);
-      window.history.replaceState({}, "", "?sheetId=" + id);
       onConnect(id, d);
     } catch (e) { setErr("Connection failed."); }
     setLoading(false);
@@ -72,8 +106,12 @@ function Setup({ onConnect }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flex:1,padding:24 }}>
       <div style={{ fontSize:48,marginBottom:16 }}>🔗</div>
-      <div style={{ fontSize:20,fontWeight:800,marginBottom:6,textAlign:"center",color:"#1a1a2e" }}>Connect Google Sheet</div>
-      <div style={{ fontSize:13,color:"#6b7280",marginBottom:16,textAlign:"center",maxWidth:340 }}>One-time setup. Share the URL with your team after connecting.</div>
+      <div style={{ fontSize:20,fontWeight:800,marginBottom:6,textAlign:"center",color:"#1a1a2e" }}>
+        Connect {company.name}
+      </div>
+      <div style={{ fontSize:13,color:"#6b7280",marginBottom:16,textAlign:"center",maxWidth:340 }}>
+        Link the Google Sheet for {company.full}
+      </div>
       <div style={{ width:"100%",maxWidth:380,background:"#f8f9fa",borderRadius:12,padding:16,marginBottom:16,border:"1px solid #e5e7eb" }}>
         <div style={{ fontSize:13,fontWeight:700,color:"#b45309",marginBottom:10 }}>Setup steps:</div>
         <div style={{ fontSize:12,color:"#6b7280",lineHeight:1.8 }}>
@@ -85,12 +123,16 @@ function Setup({ onConnect }) {
         </div>
       </div>
       <div style={{ width:"100%",maxWidth:380 }}>
-        <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="Paste Google Sheet link..."
+        <input value={url} onChange={e => setUrl(e.target.value)} placeholder={"Paste " + company.name + " Google Sheet link..."}
           style={{ width:"100%",padding:"10px 14px",borderRadius:10,border:"1px solid #d1d5db",background:"#ffffff",color:"#1a1a2e",fontSize:13,outline:"none",marginBottom:10,boxSizing:"border-box" }}
-          onKeyDown={e => e.key==="Enter" && go()} />
+          onKeyDown={e => e.key === "Enter" && go()} />
         <button onClick={go} disabled={loading || !url.trim()}
-          style={{ width:"100%",padding:12,borderRadius:10,border:"none",background:url.trim()?"linear-gradient(135deg,#f59e0b,#d97706)":"#e5e7eb",color:url.trim()?"#ffffff":"#9ca3af",fontWeight:700,fontSize:15,cursor:url.trim()?"pointer":"default" }}>
+          style={{ width:"100%",padding:12,borderRadius:10,border:"none",background:url.trim() ? "linear-gradient(135deg," + company.color + "," + company.color + ")" : "#e5e7eb",color:url.trim() ? "#ffffff" : "#9ca3af",fontWeight:700,fontSize:15,cursor:url.trim() ? "pointer" : "default" }}>
           {loading ? "Connecting..." : "Connect & Load Stock"}
+        </button>
+        <button onClick={onBack}
+          style={{ width:"100%",padding:10,borderRadius:10,border:"1px solid #e5e7eb",background:"transparent",color:"#6b7280",fontWeight:600,fontSize:13,cursor:"pointer",marginTop:8 }}>
+          ← Back
         </button>
       </div>
       {err && <div style={{ marginTop:14,padding:"10px 16px",borderRadius:10,background:"#fef2f2",border:"1px solid #fecaca",color:"#dc2626",fontSize:12,maxWidth:380,textAlign:"center" }}>{err}</div>}
@@ -99,7 +141,7 @@ function Setup({ onConnect }) {
 }
 
 function ItemRow({ item, color, hasStores }) {
-  const p = item.desc.match(/^(\d+\.?\d*)\s*OD\s*X\s*(\d+\.?\d*)\s*THK\s*(.*)$/i);
+  var p = item.desc.match(/^(\d+\.?\d*)\s*OD\s*X\s*(\d+\.?\d*)\s*THK\s*(.*)$/i);
   return (
     <div style={{ padding:"10px 14px",borderRadius:8,background:"#f8f9fa",border:"1px solid #e5e7eb",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
       <div style={{ minWidth:0 }}>
@@ -111,7 +153,7 @@ function ItemRow({ item, color, hasStores }) {
         <div style={{ fontSize:13,fontWeight:600,fontFamily:"monospace",display:"flex",gap:4,flexWrap:"wrap",alignItems:"baseline" }}>
           {p ? (
             <>
-              <span style={{color}}>{p[1]}</span>
+              <span style={{color:color}}>{p[1]}</span>
               <span style={{color:"#6b7280",fontSize:11}}> OD × </span>
               <span style={{color:"#1a1a2e"}}>{p[2]}</span>
               <span style={{color:"#6b7280",fontSize:11}}> THK </span>
@@ -124,7 +166,7 @@ function ItemRow({ item, color, hasStores }) {
         <div style={{ fontSize:10,color:"#9ca3af",marginTop:3,fontFamily:"monospace" }}>{item.code}</div>
       </div>
       <div style={{ textAlign:"right",flexShrink:0,paddingLeft:12 }}>
-        <div style={{ fontSize:15,fontWeight:800,color:item.mtr>0?color:"#dc2626",fontFamily:"monospace" }}>
+        <div style={{ fontSize:15,fontWeight:800,color:item.mtr > 0 ? color : "#dc2626",fontFamily:"monospace" }}>
           {item.mtr > 0 ? item.mtr.toLocaleString() + " Mtr" : "NIL"}
         </div>
         <div style={{ fontSize:10,color:"#6b7280" }}>
@@ -141,10 +183,10 @@ function ItemRow({ item, color, hasStores }) {
 }
 
 function SummaryBar({ items, color }) {
-  const tM = items.reduce((s,i) => s+i.mtr, 0);
-  const tN = items.reduce((s,i) => s+i.nos, 0);
-  const tV = items.reduce((s,i) => s+i.val, 0);
-  const stats = [
+  var tM = items.reduce(function(s,i) { return s+i.mtr; }, 0);
+  var tN = items.reduce(function(s,i) { return s+i.nos; }, 0);
+  var tV = items.reduce(function(s,i) { return s+i.val; }, 0);
+  var stats = [
     { v: items.length, l: "Items" },
     { v: tM.toLocaleString(undefined, {maximumFractionDigits:0}), l: "Meters" },
     { v: tN.toLocaleString(), l: "Pieces" },
@@ -152,50 +194,42 @@ function SummaryBar({ items, color }) {
   ];
   return (
     <div style={{ padding:"10px 14px",borderRadius:10,marginBottom:4,background:color+"08",border:"1px solid "+color+"20",display:"flex",justifyContent:"space-around",textAlign:"center" }}>
-      {stats.map((s,i) => (
-        <div key={i}>
-          <div style={{ fontSize:16,fontWeight:800,color:color,fontFamily:"monospace" }}>{s.v}</div>
-          <div style={{ fontSize:10,color:"#6b7280" }}>{s.l}</div>
-        </div>
-      ))}
+      {stats.map(function(s,i) {
+        return (
+          <div key={i}>
+            <div style={{ fontSize:16,fontWeight:800,color:color,fontFamily:"monospace" }}>{s.v}</div>
+            <div style={{ fontSize:10,color:"#6b7280" }}>{s.l}</div>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-function TileGrid({ values, color, onPick, getLabel, getSub }) {
-  return (
-    <div style={{ display:"flex",flexWrap:"wrap",gap:6 }}>
-      {values.map(v => (
-        <button key={v.key} onClick={() => onPick(v.val)}
-          style={{ border:"1px solid "+color+"30",background:"#ffffff",borderRadius:10,padding:"10px 16px",cursor:"pointer",textAlign:"center",minWidth:90,boxShadow:"0 1px 2px rgba(0,0,0,0.04)" }}>
-          <div style={{ fontSize:16,fontWeight:800,color:color,fontFamily:"monospace" }}>{getLabel(v)}</div>
-          <div style={{ fontSize:10,color:"#6b7280",marginTop:3 }}>{getSub(v)}</div>
-        </button>
-      ))}
-    </div>
-  );
-}
+function Browser({ data, company, onRefresh, onBack, refreshing }) {
+  var [scr, setScr] = useState("grades");
+  var [grade, setGrade] = useState(null);
+  var [od, setOd] = useState(null);
+  var [thk, setThk] = useState(null);
+  var [filter, setFilter] = useState("");
+  var [sizeMode, setSizeMode] = useState(false);
+  var [sizeQ, setSizeQ] = useState("");
+  var [store, setStore] = useState("ALL");
 
-function Browser({ data, onRefresh, onReset, refreshing }) {
-  const [scr, setScr] = useState("grades");
-  const [grade, setGrade] = useState(null);
-  const [od, setOd] = useState(null);
-  const [thk, setThk] = useState(null);
-  const [filter, setFilter] = useState("");
-  const [sizeMode, setSizeMode] = useState(false);
-  const [sizeQ, setSizeQ] = useState("");
-  const [store, setStore] = useState("ALL");
+  var all = data.items;
+  var reportDate = data.reportDate;
+  var stores = data.stores || [];
+  var hasStores = data.hasStores;
+  var items = store === "ALL" ? all : all.filter(function(i) { return i.store === store; });
+  var gi = function(p) { return items.filter(function(i) { return i.prefix === p; }); };
+  var gs = function(p) { var g = gi(p); return { n: g.length, m: g.reduce(function(s,i) { return s+i.mtr; }, 0) }; };
 
-  const { items: all, reportDate, stores = [], hasStores } = data;
-  const items = store === "ALL" ? all : all.filter(i => i.store === store);
-  const gi = (p) => items.filter(i => i.prefix === p);
-  const gs = (p) => { const g = gi(p); return { n: g.length, m: g.reduce((s,i) => s+i.mtr, 0) }; };
-
-  // --- Navigation ---
-  const pickGrade = (g) => {
+  var pickGrade = function(g) {
     setGrade(g);
-    const g2 = gi(g.prefix);
-    const odSet = [...new Set(g2.map(i => getOdFromDesc(i.desc)).filter(Boolean))];
+    var g2 = gi(g.prefix);
+    var odSet = [];
+    var seen = {};
+    g2.forEach(function(i) { var v = getOd(i.desc); if (v && !seen[v]) { seen[v] = true; odSet.push(v); } });
     if (g2.length === 0 || odSet.length <= 1) {
       setOd(null); setThk(null); setScr("items");
     } else {
@@ -203,13 +237,14 @@ function Browser({ data, onRefresh, onReset, refreshing }) {
     }
   };
 
-  const pickOd = (o) => {
+  var gradeItems = grade ? gi(grade.prefix) : [];
+
+  var pickOdFn = function(o) {
     setOd(o);
-    const odFiltered = gradeItems.filter(i => {
-      const v = getOdFromDesc(i.desc);
-      return v !== null && Math.abs(v - o) < 0.01;
-    });
-    const thkSet = [...new Set(odFiltered.map(i => getThkFromDesc(i.desc)).filter(Boolean))];
+    var odFilt = gradeItems.filter(function(i) { var v = getOd(i.desc); return v !== null && Math.abs(v - o) < 0.01; });
+    var thkSet = [];
+    var seen = {};
+    odFilt.forEach(function(i) { var v = getThk(i.desc); if (v && !seen[v]) { seen[v] = true; thkSet.push(v); } });
     if (thkSet.length <= 1) {
       setThk(null); setScr("items");
     } else {
@@ -217,110 +252,108 @@ function Browser({ data, onRefresh, onReset, refreshing }) {
     }
   };
 
-  const pickThk = (t) => {
-    setThk(t);
-    setScr("items");
+  var pickThkFn = function(t) {
+    setThk(t); setScr("items");
   };
 
-  const back = () => {
-    if (scr === "items" && thk !== null) {
-      setThk(null); setScr("thk");
-    } else if (scr === "items" && od !== null) {
-      setOd(null); setThk(null); setScr("sizes");
-    } else if (scr === "thk") {
-      setOd(null); setThk(null); setScr("sizes");
-    } else {
-      setGrade(null); setOd(null); setThk(null);
-      setScr("grades"); setFilter(""); setSizeQ(""); setSizeMode(false);
-    }
+  var goBack = function() {
+    if (scr === "items" && thk !== null) { setThk(null); setScr("thk"); }
+    else if (scr === "items" && od !== null) { setOd(null); setThk(null); setScr("sizes"); }
+    else if (scr === "thk") { setOd(null); setThk(null); setScr("sizes"); }
+    else { setGrade(null); setOd(null); setThk(null); setScr("grades"); setFilter(""); setSizeQ(""); setSizeMode(false); }
   };
 
-  // --- Derived data ---
-  const gradeItems = grade ? gi(grade.prefix) : [];
+  var odList = [];
+  var odSeen = {};
+  gradeItems.forEach(function(i) { var v = getOd(i.desc); if (v && !odSeen[v]) { odSeen[v] = true; odList.push(v); } });
+  odList.sort(function(a,b) { return a-b; });
 
-  const odList = [...new Set(gradeItems.map(i => getOdFromDesc(i.desc)).filter(Boolean))].sort((a,b) => a-b);
-
-  const odFiltered = od !== null
-    ? gradeItems.filter(i => { const v = getOdFromDesc(i.desc); return v !== null && Math.abs(v - od) < 0.01; })
+  var odFiltered = od !== null
+    ? gradeItems.filter(function(i) { var v = getOd(i.desc); return v !== null && Math.abs(v - od) < 0.01; })
     : gradeItems;
 
-  const thkList = od !== null
-    ? [...new Set(odFiltered.map(i => getThkFromDesc(i.desc)).filter(Boolean))].sort((a,b) => a-b)
-    : [];
+  var thkList = [];
+  if (od !== null) {
+    var thkSeen = {};
+    odFiltered.forEach(function(i) { var v = getThk(i.desc); if (v && !thkSeen[v]) { thkSeen[v] = true; thkList.push(v); } });
+    thkList.sort(function(a,b) { return a-b; });
+  }
 
-  const disp = thk !== null
-    ? odFiltered.filter(i => { const v = getThkFromDesc(i.desc); return v !== null && Math.abs(v - thk) < 0.01; })
+  var disp = thk !== null
+    ? odFiltered.filter(function(i) { var v = getThk(i.desc); return v !== null && Math.abs(v - thk) < 0.01; })
     : odFiltered;
 
-  // --- Size search ---
-  const sRes = sizeMode && sizeQ.trim() ? items.filter(i => {
-    const q = sizeQ.toLowerCase().replace(/x/g," ").trim();
-    const nums = q.match(/\d+\.?\d*/g);
+  var sRes = sizeMode && sizeQ.trim() ? items.filter(function(i) {
+    var q = sizeQ.toLowerCase().replace(/x/g," ").trim();
+    var nums = q.match(/\d+\.?\d*/g);
     if (nums && nums.length > 0) {
-      return nums.every(n => {
-        const d = i.desc.toLowerCase();
-        const re = new RegExp(n.replace(".","\\."));
+      return nums.every(function(n) {
+        var d = i.desc.toLowerCase();
+        var re = new RegExp(n.replace(".","\\."));
         if (re.test(d)) return true;
-        const nf = parseFloat(n);
-        const om = d.match(/(\d+\.?\d*)\s*od/);
+        var nf = parseFloat(n);
+        var om = d.match(/(\d+\.?\d*)\s*od/);
         if (om && Math.abs(parseFloat(om[1]) - nf) < 0.5) return true;
-        const tm = d.match(/(\d+\.?\d*)\s*thk/);
+        var tm = d.match(/(\d+\.?\d*)\s*thk/);
         if (tm && Math.abs(parseFloat(tm[1]) - nf) < 0.1) return true;
         return false;
       });
     }
-    return (i.desc + " " + i.cat + " " + i.code).toLowerCase().includes(q);
+    return (i.desc + " " + i.cat + " " + i.code).toLowerCase().indexOf(q) >= 0;
   }) : [];
 
-  const fg = filter
-    ? GRADES.filter(g => g.l.toLowerCase().includes(filter.toLowerCase()) || g.f.toLowerCase().includes(filter.toLowerCase()) || g.prefix.toLowerCase() === filter.toLowerCase())
+  var fg = filter
+    ? GRADES.filter(function(g) { return g.l.toLowerCase().indexOf(filter.toLowerCase()) >= 0 || g.f.toLowerCase().indexOf(filter.toLowerCase()) >= 0 || g.prefix.toLowerCase() === filter.toLowerCase(); })
     : GRADES;
-  const inS = fg.filter(g => gs(g.prefix).n > 0);
-  const noS = fg.filter(g => gs(g.prefix).n === 0);
-  const gc = grade ? (CK[grade.prefix]?.c || "#b45309") : "#b45309";
+  var inS = fg.filter(function(g) { return gs(g.prefix).n > 0; });
+  var noS = fg.filter(function(g) { return gs(g.prefix).n === 0; });
+  var gc = grade ? (CK[grade.prefix] ? CK[grade.prefix].c : "#b45309") : "#b45309";
+  var tM = disp.reduce(function(s,i){return s+i.mtr;},0);
 
-  // --- Header subtitle ---
-  var subtitle = "";
-  if (scr === "grades") subtitle = items.length + " items • " + (reportDate || "—") + (store !== "ALL" ? " • GD " + store : "");
-  else if (scr === "sizes") subtitle = gradeItems.length + " items — Select OD";
-  else if (scr === "thk") subtitle = odFiltered.length + " items — Select THK";
-  else subtitle = disp.length + " items • " + disp.reduce((s,i) => s+i.mtr, 0).toLocaleString(undefined, {maximumFractionDigits:1}) + " Mtr";
-
-  var headerTitle = "Mtube Stock";
+  var headerTitle = company.name + " Stock";
   if (scr === "sizes" && grade) headerTitle = grade.l;
   else if (scr === "thk" && grade) headerTitle = grade.l + " — " + od + " OD";
   else if (scr === "items" && grade && thk !== null) headerTitle = od + " OD × " + thk + " THK";
   else if (scr === "items" && grade && od !== null) headerTitle = grade.l + " — " + od + " OD";
   else if (scr === "items" && grade) headerTitle = grade.l;
 
+  var subtitle = "";
+  if (scr === "grades") subtitle = items.length + " items • " + (reportDate || "—") + (store !== "ALL" ? " • GD " + store : "");
+  else if (scr === "sizes") subtitle = gradeItems.length + " items — Select OD";
+  else if (scr === "thk") subtitle = odFiltered.length + " items — Select THK";
+  else subtitle = disp.length + " items • " + tM.toLocaleString(undefined, {maximumFractionDigits:1}) + " Mtr";
+
   return (
     <>
       {/* Header */}
-      <div style={{ background:"linear-gradient(135deg,#1e3a5f,#1e40af)",padding:"14px 16px",display:"flex",alignItems:"center",gap:12,borderBottom:"1px solid #e5e7eb",flexShrink:0 }}>
-        {scr !== "grades" && (
-          <button onClick={back} style={{ background:"rgba(255,255,255,0.15)",border:"none",color:"#fbbf24",width:34,height:34,borderRadius:8,cursor:"pointer",fontSize:16,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center" }}>←</button>
+      <div style={{ background:company.bg,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,borderBottom:"1px solid #e5e7eb",flexShrink:0 }}>
+        {scr !== "grades" ? (
+          <button onClick={goBack} style={{ background:"rgba(255,255,255,0.15)",border:"none",color:"#fbbf24",width:34,height:34,borderRadius:8,cursor:"pointer",fontSize:16,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center" }}>←</button>
+        ) : (
+          <button onClick={onBack} style={{ background:"rgba(255,255,255,0.15)",border:"none",color:"#fbbf24",width:34,height:34,borderRadius:8,cursor:"pointer",fontSize:16,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center" }}>←</button>
         )}
-        <div style={{ width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,#f59e0b,#d97706)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:14,color:"#ffffff",flexShrink:0 }}>MT</div>
+        <div style={{ width:38,height:38,borderRadius:10,background:"linear-gradient(135deg," + company.color + "," + company.color + ")",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:12,color:"#ffffff",flexShrink:0 }}>
+          {company.id === "mtube" ? "MT" : "RA"}
+        </div>
         <div style={{ flex:1,minWidth:0 }}>
           <div style={{ fontWeight:700,fontSize:15,color:"#ffffff" }}>{headerTitle}</div>
           <div style={{ fontSize:11,color:"rgba(255,255,255,0.7)",marginTop:1 }}>{subtitle}</div>
         </div>
         {scr === "grades" && (
-          <div style={{display:"flex",gap:6}}>
-            <button onClick={onRefresh} disabled={refreshing} style={{ background:"rgba(255,255,255,0.15)",border:"none",color:refreshing?"rgba(255,255,255,0.4)":"#4ade80",padding:"6px 12px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:700 }}>{refreshing ? "..." : "↻"}</button>
-            <button onClick={onReset} style={{ background:"rgba(255,255,255,0.15)",border:"none",color:"rgba(255,255,255,0.6)",padding:"6px 10px",borderRadius:8,cursor:"pointer",fontSize:11 }}>⚙</button>
-          </div>
+          <button onClick={onRefresh} disabled={refreshing} style={{ background:"rgba(255,255,255,0.15)",border:"none",color:refreshing ? "rgba(255,255,255,0.4)" : "#4ade80",padding:"6px 12px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:700 }}>
+            {refreshing ? "..." : "↻"}
+          </button>
         )}
       </div>
 
       {/* Godown pills */}
       {hasStores && stores.length > 0 && scr === "grades" && (
         <div style={{ padding:"8px 12px",display:"flex",gap:6,overflowX:"auto",borderBottom:"1px solid #e5e7eb",flexShrink:0,background:"#f8f9fa" }}>
-          <button onClick={() => setStore("ALL")} style={{ padding:"6px 14px",borderRadius:20,border:store==="ALL"?"1px solid #d97706":"1px solid #d1d5db",background:store==="ALL"?"#fef3c7":"#ffffff",color:store==="ALL"?"#92400e":"#6b7280",fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap" }}>All Godowns</button>
-          {stores.map(s => {
-            const n = all.filter(i => i.store === s).length;
+          <button onClick={function() { setStore("ALL"); }} style={{ padding:"6px 14px",borderRadius:20,border:store==="ALL" ? "1px solid #d97706" : "1px solid #d1d5db",background:store==="ALL" ? "#fef3c7" : "#ffffff",color:store==="ALL" ? "#92400e" : "#6b7280",fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap" }}>All Godowns</button>
+          {stores.map(function(s) {
+            var n = all.filter(function(i) { return i.store === s; }).length;
             return (
-              <button key={s} onClick={() => setStore(s)} style={{ padding:"6px 14px",borderRadius:20,border:store===s?"1px solid #d97706":"1px solid #d1d5db",background:store===s?"#fef3c7":"#ffffff",color:store===s?"#92400e":"#6b7280",fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap" }}>
+              <button key={s} onClick={function() { setStore(s); }} style={{ padding:"6px 14px",borderRadius:20,border:store===s ? "1px solid #d97706" : "1px solid #d1d5db",background:store===s ? "#fef3c7" : "#ffffff",color:store===s ? "#92400e" : "#6b7280",fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap" }}>
                 {s} <span style={{fontSize:10,opacity:0.7}}>({n})</span>
               </button>
             );
@@ -331,30 +364,32 @@ function Browser({ data, onRefresh, onReset, refreshing }) {
       {/* Content */}
       <div style={{ flex:1,overflowY:"auto",padding:12 }}>
 
-        {/* GRADES SCREEN */}
+        {/* GRADES */}
         {scr === "grades" && (
           <>
             <div style={{ display:"flex",gap:2,marginBottom:10,background:"#f1f5f9",borderRadius:10,padding:3 }}>
-              {[{k:false,l:"By Grade"},{k:true,l:"By Size"}].map(t => (
-                <button key={String(t.k)} onClick={() => { setSizeMode(t.k); setFilter(""); setSizeQ(""); }}
-                  style={{ flex:1,padding:"8px 0",borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:sizeMode===t.k?"#ffffff":"transparent",color:sizeMode===t.k?"#b45309":"#6b7280",boxShadow:sizeMode===t.k?"0 1px 3px rgba(0,0,0,0.1)":"none" }}>
-                  {t.l}
-                </button>
-              ))}
+              {[{k:false,l:"By Grade"},{k:true,l:"By Size"}].map(function(t) {
+                return (
+                  <button key={String(t.k)} onClick={function() { setSizeMode(t.k); setFilter(""); setSizeQ(""); }}
+                    style={{ flex:1,padding:"8px 0",borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:sizeMode===t.k ? "#ffffff" : "transparent",color:sizeMode===t.k ? "#b45309" : "#6b7280",boxShadow:sizeMode===t.k ? "0 1px 3px rgba(0,0,0,0.1)" : "none" }}>
+                    {t.l}
+                  </button>
+                );
+              })}
             </div>
 
             {!sizeMode ? (
               <>
                 <div style={{marginBottom:10}}>
-                  <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter grades..."
+                  <input value={filter} onChange={function(e) { setFilter(e.target.value); }} placeholder="Filter grades..."
                     style={{ width:"100%",padding:"10px 14px",borderRadius:10,border:"1px solid #d1d5db",background:"#ffffff",color:"#1a1a2e",fontSize:14,outline:"none",boxSizing:"border-box" }} />
                 </div>
                 <div style={{ fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:1.2,marginBottom:6,padding:"0 4px",color:"#b45309" }}>In Stock ({inS.length})</div>
                 <div style={{ display:"flex",flexDirection:"column",gap:6,marginBottom:16 }}>
-                  {inS.map(g => {
-                    const s = gs(g.prefix);
+                  {inS.map(function(g) {
+                    var s = gs(g.prefix);
                     return (
-                      <button key={g.prefix} onClick={() => pickGrade(g)}
+                      <button key={g.prefix} onClick={function() { pickGrade(g); }}
                         style={{ border:"1px solid "+g.c+"30",background:"#ffffff",borderRadius:10,padding:"12px 14px",cursor:"pointer",textAlign:"left",width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 1px 2px rgba(0,0,0,0.04)" }}>
                         <div>
                           <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -375,15 +410,17 @@ function Browser({ data, onRefresh, onReset, refreshing }) {
                   <>
                     <div style={{ fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:1.2,marginBottom:6,padding:"0 4px",color:"#9ca3af" }}>No Current Stock ({noS.length})</div>
                     <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                      {noS.map(g => (
-                        <div key={g.prefix} style={{padding:"8px 14px",borderRadius:10,background:"#f8f9fa",border:"1px solid #e5e7eb",display:"flex",justifyContent:"space-between",alignItems:"center",opacity:0.6}}>
-                          <div style={{display:"flex",alignItems:"center",gap:8}}>
-                            <span style={{fontFamily:"monospace",fontWeight:700,fontSize:12,color:"#9ca3af"}}>{g.prefix}</span>
-                            <span style={{fontSize:13,color:"#9ca3af"}}>{g.l}</span>
+                      {noS.map(function(g) {
+                        return (
+                          <div key={g.prefix} style={{padding:"8px 14px",borderRadius:10,background:"#f8f9fa",border:"1px solid #e5e7eb",display:"flex",justifyContent:"space-between",alignItems:"center",opacity:0.6}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8}}>
+                              <span style={{fontFamily:"monospace",fontWeight:700,fontSize:12,color:"#9ca3af"}}>{g.prefix}</span>
+                              <span style={{fontSize:13,color:"#9ca3af"}}>{g.l}</span>
+                            </div>
+                            <span style={{fontSize:11,color:"#d1d5db",fontStyle:"italic"}}>NIL</span>
                           </div>
-                          <span style={{fontSize:11,color:"#d1d5db",fontStyle:"italic"}}>NIL</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </>
                 )}
@@ -391,14 +428,14 @@ function Browser({ data, onRefresh, onReset, refreshing }) {
             ) : (
               <>
                 <div style={{marginBottom:10}}>
-                  <input value={sizeQ} onChange={e => setSizeQ(e.target.value)} placeholder='Search size... e.g. 63.50 x 3.25 or 88.90'
+                  <input value={sizeQ} onChange={function(e) { setSizeQ(e.target.value); }} placeholder='Search size... e.g. 63.50 x 3.25 or 88.90'
                     style={{ width:"100%",padding:"10px 14px",borderRadius:10,border:"1px solid #d1d5db",background:"#ffffff",color:"#1a1a2e",fontSize:14,outline:"none",boxSizing:"border-box" }} autoFocus />
                 </div>
                 {sizeQ.trim() ? (
                   sRes.length > 0 ? (
                     <div style={{display:"flex",flexDirection:"column",gap:6}}>
                       <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:1.2,marginBottom:6,padding:"0 4px",color:"#16a34a"}}>Found {sRes.length} items</div>
-                      {sRes.map(i => <ItemRow key={i.code+i.store} item={i} color={CK[i.prefix]?.c||"#6b7280"} hasStores={hasStores} />)}
+                      {sRes.map(function(i) { return <ItemRow key={i.code+i.store} item={i} color={CK[i.prefix] ? CK[i.prefix].c : "#6b7280"} hasStores={hasStores} />; })}
                     </div>
                   ) : (
                     <div style={{padding:30,textAlign:"center",borderRadius:12,background:"#fef2f2",border:"1px solid #fecaca"}}>
@@ -407,14 +444,14 @@ function Browser({ data, onRefresh, onReset, refreshing }) {
                     </div>
                   )
                 ) : (
-                  <div style={{padding:20,textAlign:"center",color:"#6b7280",fontSize:13}}>Type a size to search. e.g. "63.50" or "88.90 x 5.49"</div>
+                  <div style={{padding:20,textAlign:"center",color:"#6b7280",fontSize:13}}>Type a size to search</div>
                 )}
               </>
             )}
           </>
         )}
 
-        {/* OD SIZES SCREEN */}
+        {/* OD SIZES */}
         {scr === "sizes" && grade && (
           gradeItems.length === 0 ? (
             <div style={{padding:30,textAlign:"center",borderRadius:12,background:"#fef2f2",border:"1px solid #fecaca",marginTop:20}}>
@@ -423,134 +460,217 @@ function Browser({ data, onRefresh, onReset, refreshing }) {
             </div>
           ) : (
             <>
-              <button onClick={() => { setOd(null); setThk(null); setScr("items"); }}
+              <button onClick={function() { setOd(null); setThk(null); setScr("items"); }}
                 style={{border:"1px solid "+gc+"30",background:gc+"08",borderRadius:10,padding:"12px 14px",cursor:"pointer",textAlign:"center",width:"100%",marginBottom:10}}>
                 <div style={{fontSize:14,fontWeight:700,color:gc}}>📋 View All {gradeItems.length} Sizes</div>
-                <div style={{fontSize:11,color:"#6b7280",marginTop:2}}>Total: {gradeItems.reduce((s,i) => s+i.mtr, 0).toLocaleString(undefined,{maximumFractionDigits:0})} Mtr</div>
+                <div style={{fontSize:11,color:"#6b7280",marginTop:2}}>Total: {gradeItems.reduce(function(s,i){return s+i.mtr;},0).toLocaleString(undefined,{maximumFractionDigits:0})} Mtr</div>
               </button>
               <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:1.2,marginBottom:8,padding:"0 4px",color:"#6b7280"}}>Select OD Size</div>
-              <TileGrid
-                values={odList.map(o => {
-                  const oi = gradeItems.filter(i => { const v = getOdFromDesc(i.desc); return v !== null && Math.abs(v-o) < 0.01; });
-                  return { key: o, val: o, count: oi.length, mtr: oi.reduce((s,i) => s+i.mtr, 0) };
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {odList.map(function(o) {
+                  var oi = gradeItems.filter(function(i) { var v = getOd(i.desc); return v !== null && Math.abs(v-o) < 0.01; });
+                  return (
+                    <button key={o} onClick={function() { pickOdFn(o); }}
+                      style={{border:"1px solid "+gc+"30",background:"#ffffff",borderRadius:10,padding:"10px 16px",cursor:"pointer",textAlign:"center",minWidth:90,boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
+                      <div style={{fontSize:16,fontWeight:800,color:gc,fontFamily:"monospace"}}>{o}</div>
+                      <div style={{fontSize:10,color:"#6b7280",marginTop:3}}>{oi.length} • {oi.reduce(function(s,i){return s+i.mtr;},0).toLocaleString(undefined,{maximumFractionDigits:0})} Mtr</div>
+                    </button>
+                  );
                 })}
-                color={gc}
-                onPick={pickOd}
-                getLabel={v => v.val}
-                getSub={v => v.count + " • " + v.mtr.toLocaleString(undefined,{maximumFractionDigits:0}) + " Mtr"}
-              />
+              </div>
             </>
           )
         )}
 
-        {/* THICKNESS SCREEN */}
+        {/* THICKNESS */}
         {scr === "thk" && grade && od !== null && (
           <>
-            <button onClick={() => { setThk(null); setScr("items"); }}
+            <button onClick={function() { setThk(null); setScr("items"); }}
               style={{border:"1px solid "+gc+"30",background:gc+"08",borderRadius:10,padding:"12px 14px",cursor:"pointer",textAlign:"center",width:"100%",marginBottom:10}}>
               <div style={{fontSize:14,fontWeight:700,color:gc}}>📋 View All {odFiltered.length} for {od} OD</div>
-              <div style={{fontSize:11,color:"#6b7280",marginTop:2}}>Total: {odFiltered.reduce((s,i) => s+i.mtr, 0).toLocaleString(undefined,{maximumFractionDigits:0})} Mtr</div>
+              <div style={{fontSize:11,color:"#6b7280",marginTop:2}}>Total: {odFiltered.reduce(function(s,i){return s+i.mtr;},0).toLocaleString(undefined,{maximumFractionDigits:0})} Mtr</div>
             </button>
             <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:1.2,marginBottom:8,padding:"0 4px",color:"#6b7280"}}>Select Thickness</div>
-            <TileGrid
-              values={thkList.map(t => {
-                const ti = odFiltered.filter(i => { const v = getThkFromDesc(i.desc); return v !== null && Math.abs(v-t) < 0.01; });
-                return { key: t, val: t, count: ti.length, mtr: ti.reduce((s,i) => s+i.mtr, 0) };
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {thkList.map(function(t) {
+                var ti = odFiltered.filter(function(i) { var v = getThk(i.desc); return v !== null && Math.abs(v-t) < 0.01; });
+                return (
+                  <button key={t} onClick={function() { pickThkFn(t); }}
+                    style={{border:"1px solid "+gc+"30",background:"#ffffff",borderRadius:10,padding:"10px 16px",cursor:"pointer",textAlign:"center",minWidth:90,boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
+                    <div style={{fontSize:16,fontWeight:800,color:gc,fontFamily:"monospace"}}>{t}</div>
+                    <div style={{fontSize:10,color:"#6b7280",marginTop:3}}>{ti.length} • {ti.reduce(function(s,i){return s+i.mtr;},0).toLocaleString(undefined,{maximumFractionDigits:0})} Mtr</div>
+                  </button>
+                );
               })}
-              color={gc}
-              onPick={pickThk}
-              getLabel={v => v.val}
-              getSub={v => v.count + " • " + v.mtr.toLocaleString(undefined,{maximumFractionDigits:0}) + " Mtr"}
-            />
+            </div>
           </>
         )}
 
-        {/* ITEMS SCREEN */}
+        {/* ITEMS */}
         {scr === "items" && grade && (
           <div style={{display:"flex",flexDirection:"column",gap:6}}>
             <SummaryBar items={disp} color={gc} />
-            {disp.map(i => <ItemRow key={i.code+i.store} item={i} color={gc} hasStores={hasStores} />)}
+            {disp.map(function(i) { return <ItemRow key={i.code+i.store} item={i} color={gc} hasStores={hasStores} />; })}
           </div>
         )}
 
       </div>
 
       <div style={{ padding:"10px 16px",textAlign:"center",flexShrink:0,borderTop:"1px solid #e5e7eb",fontSize:11,color:"#9ca3af" }}>
-        Manhar Tube Corporation • {reportDate ? "Stock as on " + reportDate : ""} • {items.length} items • ↻ to refresh
+        {company.full} • {reportDate ? "Stock as on " + reportDate : ""} • {items.length} items
       </div>
     </>
   );
 }
 
 export default function App() {
-  const [sid, setSid] = useState(null);
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [rfr, setRfr] = useState(false);
-  const [err, setErr] = useState("");
+  var [screen, setScreen] = useState("pick");
+  var [activeCoId, setActiveCoId] = useState(null);
+  var [sheets, setSheets] = useState({});
+  var [dataCache, setDataCache] = useState({});
+  var [rfr, setRfr] = useState(false);
+  var [setupCoId, setSetupCoId] = useState(null);
 
-  const fetch2 = useCallback(async (id) => {
-    try {
-      const r = await fetch("/api/stock?sheetId=" + id);
-      const d = await r.json();
-      if (d.error) { setErr(d.error); return null; }
-      return d;
-    } catch (e) { setErr("Connection failed."); return null; }
-  }, []);
+  useEffect(function() {
+    var saved = {};
+    COMPANIES.forEach(function(co) {
+      var sid = localStorage.getItem("stock-" + co.id);
+      if (sid) saved[co.id] = sid;
+    });
+    setSheets(saved);
 
-  useEffect(() => {
-    const p = new URLSearchParams(window.location.search);
-    const u = p.get("sheetId");
-    const s = localStorage.getItem("mtube-sid");
-    const id = u || s;
-    if (id) {
-      setSid(id);
-      if (u) localStorage.setItem("mtube-sid", u);
-      fetch2(id).then(d => { if (d) setData(d); setLoading(false); });
-    } else {
-      setLoading(false);
+    // Auto-load if URL has company param
+    var p = new URLSearchParams(window.location.search);
+    var coParam = p.get("co");
+    var sidParam = p.get("sheetId");
+    if (coParam && sidParam) {
+      saved[coParam] = sidParam;
+      localStorage.setItem("stock-" + coParam, sidParam);
+      setSheets(Object.assign({}, saved));
+      setActiveCoId(coParam);
+      setScreen("loading");
+      fetchData(sidParam).then(function(d) {
+        if (d) {
+          setDataCache(function(prev) { var n = Object.assign({}, prev); n[coParam] = d; return n; });
+          setScreen("browse");
+        } else {
+          setScreen("pick");
+        }
+      });
+    } else if (Object.keys(saved).length === 1) {
+      // Only one company connected, auto-open it
+      var onlyId = Object.keys(saved)[0];
+      setActiveCoId(onlyId);
+      setScreen("loading");
+      fetchData(saved[onlyId]).then(function(d) {
+        if (d) {
+          setDataCache(function(prev) { var n = Object.assign({}, prev); n[onlyId] = d; return n; });
+          setScreen("browse");
+        } else {
+          setScreen("pick");
+        }
+      });
     }
-  }, [fetch2]);
-
-  const onConnect = useCallback((id, d) => { setSid(id); setData(d); setErr(""); }, []);
-  const onRefresh = useCallback(async () => {
-    if (!sid || rfr) return;
-    setRfr(true);
-    const d = await fetch2(sid);
-    if (d) setData(d);
-    setRfr(false);
-  }, [sid, rfr, fetch2]);
-  const onReset = useCallback(() => {
-    localStorage.removeItem("mtube-sid");
-    window.history.replaceState({}, "", window.location.pathname);
-    setSid(null); setData(null); setErr("");
   }, []);
 
-  if (loading) {
-    return (
-      <div style={{fontFamily:"'-apple-system',sans-serif",height:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#ffffff",color:"#b45309"}}>
-        Loading...
-      </div>
-    );
-  }
+  var fetchData = async function(sheetId) {
+    try {
+      var r = await fetch("/api/stock?sheetId=" + sheetId);
+      var d = await r.json();
+      if (d.error) return null;
+      return d;
+    } catch (e) { return null; }
+  };
+
+  var openCompany = async function(coId) {
+    setActiveCoId(coId);
+    var sid = sheets[coId];
+    if (dataCache[coId]) {
+      setScreen("browse");
+      return;
+    }
+    setScreen("loading");
+    var d = await fetchData(sid);
+    if (d) {
+      setDataCache(function(prev) { var n = Object.assign({}, prev); n[coId] = d; return n; });
+      setScreen("browse");
+    } else {
+      setScreen("pick");
+    }
+  };
+
+  var onSetup = function(coId) {
+    setSetupCoId(coId);
+    setScreen("setup");
+  };
+
+  var onConnect = function(sheetId, data) {
+    var coId = setupCoId;
+    localStorage.setItem("stock-" + coId, sheetId);
+    setSheets(function(prev) { var n = Object.assign({}, prev); n[coId] = sheetId; return n; });
+    setDataCache(function(prev) { var n = Object.assign({}, prev); n[coId] = data; return n; });
+    setActiveCoId(coId);
+    setScreen("browse");
+  };
+
+  var onRefresh = async function() {
+    if (!activeCoId || rfr) return;
+    setRfr(true);
+    var d = await fetchData(sheets[activeCoId]);
+    if (d) {
+      setDataCache(function(prev) { var n = Object.assign({}, prev); n[activeCoId] = d; return n; });
+    }
+    setRfr(false);
+  };
+
+  var goHome = function() {
+    setActiveCoId(null);
+    setSetupCoId(null);
+    setScreen("pick");
+  };
+
+  var activeCo = activeCoId ? COMPANIES.find(function(c) { return c.id === activeCoId; }) : null;
+  var setupCo = setupCoId ? COMPANIES.find(function(c) { return c.id === setupCoId; }) : null;
 
   return (
     <div style={{fontFamily:"'-apple-system',sans-serif",height:"100vh",display:"flex",flexDirection:"column",background:"#ffffff",color:"#1a1a2e"}}>
-      {!sid || !data ? (
+
+      {screen === "loading" && (
+        <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:"#b45309"}}>Loading...</div>
+      )}
+
+      {screen === "pick" && (
         <>
           <div style={{background:"linear-gradient(135deg,#1e3a5f,#1e40af)",padding:"14px 16px",display:"flex",alignItems:"center",gap:12,borderBottom:"1px solid #e5e7eb"}}>
-            <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,#f59e0b,#d97706)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:14,color:"#ffffff"}}>MT</div>
+            <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,#f59e0b,#d97706)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:16,color:"#ffffff"}}>📊</div>
             <div>
-              <div style={{fontWeight:700,fontSize:15,color:"#ffffff"}}>Mtube Stock Query</div>
-              <div style={{fontSize:11,color:"rgba(255,255,255,0.7)"}}>Manhar Tube Corporation</div>
+              <div style={{fontWeight:700,fontSize:15,color:"#ffffff"}}>Stock Query</div>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.7)"}}>Select Company</div>
             </div>
           </div>
-          <Setup onConnect={onConnect} />
-          {err && <div style={{padding:"10px 16px",textAlign:"center",color:"#dc2626",fontSize:12}}>{err}</div>}
+          <CompanyPicker companies={COMPANIES} sheets={sheets} onPick={openCompany} onSetup={onSetup} />
         </>
-      ) : (
-        <Browser data={data} onRefresh={onRefresh} onReset={onReset} refreshing={rfr} />
       )}
+
+      {screen === "setup" && setupCo && (
+        <>
+          <div style={{background:setupCo.bg,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,borderBottom:"1px solid #e5e7eb"}}>
+            <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg," + setupCo.color + "," + setupCo.color + ")",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:14,color:"#ffffff"}}>
+              {setupCo.id === "mtube" ? "MT" : "RA"}
+            </div>
+            <div>
+              <div style={{fontWeight:700,fontSize:15,color:"#ffffff"}}>Setup {setupCo.name}</div>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.7)"}}>{setupCo.full}</div>
+            </div>
+          </div>
+          <Setup company={setupCo} onConnect={onConnect} onBack={goHome} />
+        </>
+      )}
+
+      {screen === "browse" && activeCo && dataCache[activeCoId] && (
+        <Browser data={dataCache[activeCoId]} company={activeCo} onRefresh={onRefresh} onBack={goHome} refreshing={rfr} />
+      )}
+
     </div>
   );
 }
