@@ -39,6 +39,14 @@ var GRADES = Object.entries(CK).map(function(e) { return Object.assign({ prefix:
 
 function getOd(d) { var m = d.match(/^(\d+\.?\d*)\s*OD/); return m ? parseFloat(m[1]) : null; }
 function getThk(d) { var m = d.match(/OD\s*X\s*(\d+\.?\d*)\s*THK/i); return m ? parseFloat(m[1]) : null; }
+function getLen(d) { var m = d.match(/THK\s*X\s*(\d+\.?\d*)\s*MM/i); return m ? parseFloat(m[1]) : null; }
+
+function unique(arr) {
+  var seen = {}, out = [];
+  arr.forEach(function(v) { if (v !== null && !seen[v]) { seen[v] = true; out.push(v); } });
+  out.sort(function(a,b){return a-b;});
+  return out;
+}
 
 function ItemRow(props) {
   var item = props.item, color = props.color, hasStores = props.hasStores;
@@ -61,16 +69,35 @@ function ItemRow(props) {
   );
 }
 
+function TileSelector(props) {
+  var values = props.values, color = props.color, onPick = props.onPick, items = props.items, filterFn = props.filterFn, label = props.label, unit = props.unit;
+  return (<>
+    <div style={{fontSize:11,fontWeight:700,color:"#6b7280",marginBottom:8}}>{label}</div>
+    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+      {values.map(function(v) {
+        var fi = items.filter(function(i) { return filterFn(i, v); });
+        return (
+          <button key={v} onClick={function(){onPick(v);}} style={{border:"1px solid "+color+"30",background:"#fff",borderRadius:10,padding:"10px 16px",cursor:"pointer",textAlign:"center",minWidth:90,boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
+            <div style={{fontSize:16,fontWeight:800,color:color,fontFamily:"monospace"}}>{v}{unit ? " " + unit : ""}</div>
+            <div style={{fontSize:10,color:"#6b7280",marginTop:3}}>{fi.length} • {fi.reduce(function(s,i){return s+i.mtr;},0).toLocaleString(undefined,{maximumFractionDigits:0})} Mtr</div>
+          </button>
+        );
+      })}
+    </div>
+  </>);
+}
+
 function StockView(props) {
   var data = props.data, accentColor = props.accentColor;
   var _s1 = useState("grades"), scr = _s1[0], setScr = _s1[1];
   var _s2 = useState(null), grade = _s2[0], setGrade = _s2[1];
   var _s3 = useState(null), od = _s3[0], setOd = _s3[1];
   var _s4 = useState(null), thk = _s4[0], setThk = _s4[1];
-  var _s5 = useState(""), filter = _s5[0], setFilter = _s5[1];
-  var _s6 = useState(false), sizeMode = _s6[0], setSizeMode = _s6[1];
-  var _s7 = useState(""), sizeQ = _s7[0], setSizeQ = _s7[1];
-  var _s8 = useState("ALL"), store = _s8[0], setStore = _s8[1];
+  var _s5 = useState(null), len = _s5[0], setLen = _s5[1];
+  var _s6 = useState(""), filter = _s6[0], setFilter = _s6[1];
+  var _s7 = useState(false), sizeMode = _s7[0], setSizeMode = _s7[1];
+  var _s8 = useState(""), sizeQ = _s8[0], setSizeQ = _s8[1];
+  var _s9 = useState("ALL"), store = _s9[0], setStore = _s9[1];
 
   if (!data) return <div style={{padding:40,textAlign:"center",color:"#9ca3af"}}>Not connected</div>;
 
@@ -81,56 +108,66 @@ function StockView(props) {
 
   var gradeItems = grade ? gi(grade.prefix) : [];
 
+  // Filter chains
+  var odFiltered = od !== null ? gradeItems.filter(function(i) { var v = getOd(i.desc); return v !== null && Math.abs(v-od) < 0.01; }) : gradeItems;
+  var thkFiltered = thk !== null ? odFiltered.filter(function(i) { var v = getThk(i.desc); return v !== null && Math.abs(v-thk) < 0.01; }) : odFiltered;
+  var lenFiltered = len !== null ? thkFiltered.filter(function(i) { var v = getLen(i.desc); return v !== null && Math.abs(v-len) < 0.5; }) : thkFiltered;
+  var disp = lenFiltered;
+
+  var odList = unique(gradeItems.map(function(i){return getOd(i.desc);}));
+  var thkList = od !== null ? unique(odFiltered.map(function(i){return getThk(i.desc);})) : [];
+  var lenList = thk !== null ? unique(thkFiltered.map(function(i){return getLen(i.desc);})) : [];
+
+  var tM = disp.reduce(function(s,i){return s+i.mtr;},0);
+  var tN = disp.reduce(function(s,i){return s+i.nos;},0);
+  var tV = disp.reduce(function(s,i){return s+i.val;},0);
+
+  // Navigation
   var pickGrade = function(g) {
     setGrade(g);
     var g2 = gi(g.prefix);
-    var seen = {}, odSet = [];
-    g2.forEach(function(i) { var v = getOd(i.desc); if (v && !seen[v]) { seen[v]=true; odSet.push(v); } });
-    if (g2.length === 0 || odSet.length <= 1) { setOd(null); setThk(null); setScr("items"); }
+    var ods = unique(g2.map(function(i){return getOd(i.desc);}));
+    if (g2.length === 0 || ods.length <= 1) { setOd(null); setThk(null); setLen(null); setScr("items"); }
     else { setScr("sizes"); }
   };
 
   var pickOdFn = function(o) {
     setOd(o);
-    var odFilt = gradeItems.filter(function(i) { var v = getOd(i.desc); return v !== null && Math.abs(v-o) < 0.01; });
-    var seen = {}, thkSet = [];
-    odFilt.forEach(function(i) { var v = getThk(i.desc); if (v && !seen[v]) { seen[v]=true; thkSet.push(v); } });
-    if (thkSet.length <= 1) { setThk(null); setScr("items"); }
+    var ofi = gradeItems.filter(function(i) { var v = getOd(i.desc); return v !== null && Math.abs(v-o) < 0.01; });
+    var thks = unique(ofi.map(function(i){return getThk(i.desc);}));
+    if (thks.length <= 1) { setThk(null); setLen(null); setScr("items"); }
     else { setScr("thk"); }
   };
 
-  var goBack = function() {
-    if (scr === "items" && thk !== null) { setThk(null); setScr("thk"); }
-    else if (scr === "items" && od !== null) { setOd(null); setThk(null); setScr("sizes"); }
-    else if (scr === "thk") { setOd(null); setThk(null); setScr("sizes"); }
-    else { setGrade(null); setOd(null); setThk(null); setScr("grades"); setFilter(""); setSizeQ(""); setSizeMode(false); }
+  var pickThkFn = function(t) {
+    setThk(t);
+    var tfi = odFiltered.filter(function(i) { var v = getThk(i.desc); return v !== null && Math.abs(v-t) < 0.01; });
+    var lens = unique(tfi.map(function(i){return getLen(i.desc);}));
+    if (lens.length <= 1) { setLen(null); setScr("items"); }
+    else { setScr("len"); }
   };
 
-  var odList = [];
-  var odSeen = {};
-  gradeItems.forEach(function(i) { var v = getOd(i.desc); if (v && !odSeen[v]) { odSeen[v]=true; odList.push(v); } });
-  odList.sort(function(a,b){return a-b;});
+  var pickLenFn = function(l) {
+    setLen(l); setScr("items");
+  };
 
-  var odFiltered = od !== null ? gradeItems.filter(function(i) { var v = getOd(i.desc); return v !== null && Math.abs(v-od) < 0.01; }) : gradeItems;
+  var resetAll = function() { setGrade(null); setOd(null); setThk(null); setLen(null); setScr("grades"); setFilter(""); setSizeQ(""); setSizeMode(false); };
 
-  var thkList = [];
-  if (od !== null) {
-    var thkSeen = {};
-    odFiltered.forEach(function(i) { var v = getThk(i.desc); if (v && !thkSeen[v]) { thkSeen[v]=true; thkList.push(v); } });
-    thkList.sort(function(a,b){return a-b;});
-  }
+  var goBack = function() {
+    if (scr === "items" && len !== null) { setLen(null); setScr("len"); }
+    else if (scr === "items" && thk !== null) { setThk(null); setLen(null); setScr("thk"); }
+    else if (scr === "items" && od !== null) { setOd(null); setThk(null); setLen(null); setScr("sizes"); }
+    else if (scr === "len") { setThk(null); setLen(null); setScr("thk"); }
+    else if (scr === "thk") { setOd(null); setThk(null); setLen(null); setScr("sizes"); }
+    else { resetAll(); }
+  };
 
-  var disp = thk !== null ? odFiltered.filter(function(i) { var v = getThk(i.desc); return v !== null && Math.abs(v-thk) < 0.01; }) : odFiltered;
-  var tM = disp.reduce(function(s,i){return s+i.mtr;},0);
-  var tN = disp.reduce(function(s,i){return s+i.nos;},0);
-  var tV = disp.reduce(function(s,i){return s+i.val;},0);
-
+  // Size search
   var sRes = sizeMode && sizeQ.trim() ? items.filter(function(i) {
     var q = sizeQ.toLowerCase().replace(/x/g," ").trim();
     var nums = q.match(/\d+\.?\d*/g);
     if (nums && nums.length > 0) return nums.every(function(n) {
-      var d = i.desc.toLowerCase();
-      var nf = parseFloat(n);
+      var d = i.desc.toLowerCase(); var nf = parseFloat(n);
       var om = d.match(/(\d+\.?\d*)\s*od/); if (om && Math.abs(parseFloat(om[1])-nf) < 0.5) return true;
       var tm = d.match(/(\d+\.?\d*)\s*thk/); if (tm && Math.abs(parseFloat(tm[1])-nf) < 0.1) return true;
       return new RegExp(n.replace(".","\\.")).test(d);
@@ -143,23 +180,29 @@ function StockView(props) {
   var noS = fg.filter(function(g){return gs(g.prefix).n===0;});
   var gc = grade ? (CK[grade.prefix] ? CK[grade.prefix].c : accentColor) : accentColor;
 
+  // Breadcrumb text
+  var breadcrumb = "";
+  if (scr === "sizes" && grade) breadcrumb = grade.l;
+  if (scr === "thk" && grade) breadcrumb = grade.l + " → " + od + " OD";
+  if (scr === "len" && grade) breadcrumb = grade.l + " → " + od + " OD → " + thk + " THK";
+  if (scr === "items" && grade) {
+    var parts = [grade.l];
+    if (od !== null) parts.push(od + " OD");
+    if (thk !== null) parts.push(thk + " THK");
+    if (len !== null) parts.push(len + " MM");
+    breadcrumb = parts.join(" → ");
+  }
+
   return (
     <>
-      {/* Sub-header for back + context */}
       {scr !== "grades" && (
         <div style={{ padding:"8px 12px",background:"#f8f9fa",borderBottom:"1px solid #e5e7eb",display:"flex",alignItems:"center",gap:10 }}>
           <button onClick={goBack} style={{ background:"#e5e7eb",border:"none",color:"#1a1a2e",width:30,height:30,borderRadius:6,cursor:"pointer",fontSize:14,fontWeight:700 }}>←</button>
-          <div style={{ fontSize:13,fontWeight:600,color:"#1a1a2e" }}>
-            {scr==="sizes" && grade ? grade.l : ""}
-            {scr==="thk" && grade ? grade.l + " — " + od + " OD" : ""}
-            {scr==="items" && thk !== null ? od + " OD × " + thk + " THK" : ""}
-            {scr==="items" && thk === null && od !== null ? grade.l + " — " + od + " OD" : ""}
-            {scr==="items" && od === null && grade ? grade.l + " (All)" : ""}
-          </div>
+          <div style={{ fontSize:12,fontWeight:600,color:"#374151",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{breadcrumb}</div>
+          <button onClick={resetAll} style={{ background:"none",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:10,fontWeight:600 }}>HOME</button>
         </div>
       )}
 
-      {/* Godown pills */}
       {hasStores && stores.length > 0 && scr === "grades" && (
         <div style={{ padding:"8px 12px",display:"flex",gap:6,overflowX:"auto",borderBottom:"1px solid #e5e7eb",flexShrink:0,background:"#f8f9fa" }}>
           <button onClick={function(){setStore("ALL");}} style={{ padding:"5px 12px",borderRadius:20,border:store==="ALL"?"1px solid #d97706":"1px solid #d1d5db",background:store==="ALL"?"#fef3c7":"#fff",color:store==="ALL"?"#92400e":"#6b7280",fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap" }}>All</button>
@@ -170,7 +213,6 @@ function StockView(props) {
         </div>
       )}
 
-      {/* Main scrollable content */}
       <div style={{ flex:1,overflowY:"auto",padding:12 }}>
 
         {scr === "grades" && (<>
@@ -200,15 +242,18 @@ function StockView(props) {
         </>)}
 
         {scr === "sizes" && grade && (gradeItems.length === 0 ? <div style={{padding:30,textAlign:"center",color:"#dc2626",fontWeight:700}}>No Stock</div> : (<>
-          <button onClick={function(){setOd(null);setThk(null);setScr("items");}} style={{border:"1px solid "+gc+"30",background:gc+"08",borderRadius:10,padding:"12px",cursor:"pointer",textAlign:"center",width:"100%",marginBottom:10}}><div style={{fontSize:14,fontWeight:700,color:gc}}>View All {gradeItems.length} Sizes</div></button>
-          <div style={{fontSize:11,fontWeight:700,color:"#6b7280",marginBottom:8}}>SELECT OD</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{odList.map(function(o) { var oi = gradeItems.filter(function(i){var v=getOd(i.desc);return v!==null&&Math.abs(v-o)<0.01;}); return <button key={o} onClick={function(){pickOdFn(o);}} style={{border:"1px solid "+gc+"30",background:"#fff",borderRadius:10,padding:"10px 16px",cursor:"pointer",textAlign:"center",minWidth:90,boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}><div style={{fontSize:16,fontWeight:800,color:gc,fontFamily:"monospace"}}>{o}</div><div style={{fontSize:10,color:"#6b7280",marginTop:3}}>{oi.length} • {oi.reduce(function(s,i){return s+i.mtr;},0).toLocaleString(undefined,{maximumFractionDigits:0})} Mtr</div></button>; })}</div>
+          <button onClick={function(){setOd(null);setThk(null);setLen(null);setScr("items");}} style={{border:"1px solid "+gc+"30",background:gc+"08",borderRadius:10,padding:"12px",cursor:"pointer",textAlign:"center",width:"100%",marginBottom:10}}><div style={{fontSize:14,fontWeight:700,color:gc}}>View All {gradeItems.length} Sizes</div></button>
+          <TileSelector values={odList} color={gc} onPick={pickOdFn} items={gradeItems} filterFn={function(i,v){var x=getOd(i.desc);return x!==null&&Math.abs(x-v)<0.01;}} label="SELECT OD" />
         </>))}
 
         {scr === "thk" && grade && od !== null && (<>
-          <button onClick={function(){setThk(null);setScr("items");}} style={{border:"1px solid "+gc+"30",background:gc+"08",borderRadius:10,padding:"12px",cursor:"pointer",textAlign:"center",width:"100%",marginBottom:10}}><div style={{fontSize:14,fontWeight:700,color:gc}}>View All {odFiltered.length} for {od} OD</div></button>
-          <div style={{fontSize:11,fontWeight:700,color:"#6b7280",marginBottom:8}}>SELECT THICKNESS</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{thkList.map(function(t) { var ti = odFiltered.filter(function(i){var v=getThk(i.desc);return v!==null&&Math.abs(v-t)<0.01;}); return <button key={t} onClick={function(){setThk(t);setScr("items");}} style={{border:"1px solid "+gc+"30",background:"#fff",borderRadius:10,padding:"10px 16px",cursor:"pointer",textAlign:"center",minWidth:90,boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}><div style={{fontSize:16,fontWeight:800,color:gc,fontFamily:"monospace"}}>{t}</div><div style={{fontSize:10,color:"#6b7280",marginTop:3}}>{ti.length} • {ti.reduce(function(s,i){return s+i.mtr;},0).toLocaleString(undefined,{maximumFractionDigits:0})} Mtr</div></button>; })}</div>
+          <button onClick={function(){setThk(null);setLen(null);setScr("items");}} style={{border:"1px solid "+gc+"30",background:gc+"08",borderRadius:10,padding:"12px",cursor:"pointer",textAlign:"center",width:"100%",marginBottom:10}}><div style={{fontSize:14,fontWeight:700,color:gc}}>View All {odFiltered.length} for {od} OD</div></button>
+          <TileSelector values={thkList} color={gc} onPick={pickThkFn} items={odFiltered} filterFn={function(i,v){var x=getThk(i.desc);return x!==null&&Math.abs(x-v)<0.01;}} label="SELECT THICKNESS" />
+        </>)}
+
+        {scr === "len" && grade && thk !== null && (<>
+          <button onClick={function(){setLen(null);setScr("items");}} style={{border:"1px solid "+gc+"30",background:gc+"08",borderRadius:10,padding:"12px",cursor:"pointer",textAlign:"center",width:"100%",marginBottom:10}}><div style={{fontSize:14,fontWeight:700,color:gc}}>View All {thkFiltered.length} for {od} OD × {thk} THK</div></button>
+          <TileSelector values={lenList} color={gc} onPick={pickLenFn} items={thkFiltered} filterFn={function(i,v){var x=getLen(i.desc);return x!==null&&Math.abs(x-v)<0.5;}} label="SELECT LENGTH" unit="MM" />
         </>)}
 
         {scr === "items" && grade && (<div style={{display:"flex",flexDirection:"column",gap:6}}>
@@ -220,7 +265,7 @@ function StockView(props) {
       </div>
 
       <div style={{ padding:"8px 16px",textAlign:"center",flexShrink:0,borderTop:"1px solid #e5e7eb",fontSize:10,color:"#9ca3af" }}>
-        {reportDate ? "Stock as on " + reportDate : ""} • {items.length} items • ↻ to refresh
+        {reportDate ? "Stock as on " + reportDate : ""} • {items.length} items
       </div>
     </>
   );
@@ -274,7 +319,6 @@ export default function App() {
   useEffect(function() {
     var p = new URLSearchParams(window.location.search);
     var saved = {};
-    // Read from URL first, then localStorage fallback
     ["mtube","rushabh"].forEach(function(co) {
       var sid = p.get(co) || localStorage.getItem("stock-" + co);
       if (sid) { saved[co] = sid; localStorage.setItem("stock-" + co, sid); }
@@ -282,7 +326,6 @@ export default function App() {
     setSheets(saved);
     updateUrl(saved);
 
-    // Load data for connected companies
     var promises = Object.keys(saved).map(function(co) {
       return fetchData(saved[co]).then(function(d) { return { co: co, data: d }; });
     });
@@ -325,7 +368,6 @@ export default function App() {
 
   return (
     <div style={{fontFamily:"'-apple-system',sans-serif",height:"100vh",display:"flex",flexDirection:"column",background:"#fff",color:"#1a1a2e"}}>
-      {/* Header with company tabs */}
       <div style={{ background:"linear-gradient(135deg,#1e3a5f,#1e40af)",flexShrink:0 }}>
         <div style={{ padding:"12px 16px",display:"flex",alignItems:"center",gap:10 }}>
           <div style={{ fontSize:15,fontWeight:800,color:"#fff" }}>Stock Query</div>
@@ -338,7 +380,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Date + item count bar */}
       {dataCache[tab] && (
         <div style={{ padding:"6px 16px",background:"#f8f9fa",borderBottom:"1px solid #e5e7eb",display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:600,color:"#6b7280",flexShrink:0 }}>
           <span>{dataCache[tab].reportDate ? "Stock as on " + dataCache[tab].reportDate : ""}</span>
@@ -346,7 +387,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Content based on active tab */}
       {sheets[tab] && dataCache[tab] ? (
         <StockView data={dataCache[tab]} accentColor={tab === "mtube" ? "#d97706" : "#059669"} />
       ) : (
